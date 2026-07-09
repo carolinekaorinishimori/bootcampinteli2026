@@ -99,6 +99,12 @@ export function listCandidates(jobId?: string): Candidate[] {
 export function getCandidateByToken(token: string): Candidate | undefined {
   return read<Candidate[]>(K_CANDS, []).find((c) => c.inviteToken === token);
 }
+export function getCandidateByEmail(email: string): Candidate | undefined {
+  const e = email.trim().toLowerCase();
+  return read<Candidate[]>(K_CANDS, []).find(
+    (c) => c.email.trim().toLowerCase() === e,
+  );
+}
 export function saveCandidates(candidates: Candidate[]) {
   const all = read<Candidate[]>(K_CANDS, []);
   const map = new Map(all.map((c) => [c.id, c]));

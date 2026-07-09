@@ -4,6 +4,7 @@ export type Role = "rh" | "candidato";
 export type Session = {
   role: Role;
   name: string;
+  email?: string;
   loggedAt: string;
 };
 
@@ -19,8 +20,13 @@ export function getSession(): Session | null {
   }
 }
 
-export function login(role: Role, name: string): Session {
-  const s: Session = { role, name: name.trim() || (role === "rh" ? "Recrutador" : "Candidato"), loggedAt: new Date().toISOString() };
+export function login(role: Role, name: string, email?: string): Session {
+  const s: Session = {
+    role,
+    name: name.trim() || (role === "rh" ? "Recrutador" : "Candidato"),
+    email: email?.trim().toLowerCase() || undefined,
+    loggedAt: new Date().toISOString(),
+  };
   localStorage.setItem(KEY, JSON.stringify(s));
   return s;
 }
