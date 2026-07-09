@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 .output
+# npm lockfile (project uses bun.lock)
+package-lock.json
 .vinxi
 .tanstack/**
 .nitro
