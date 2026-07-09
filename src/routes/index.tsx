@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { LogoMark } from "@/components/AppShell";
 import { getSession, login, type Role } from "@/lib/auth";
-import { getCandidateByEmail, listCandidates } from "@/lib/skyhire";
+import { listCandidates } from "@/lib/skyhire";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -18,30 +18,20 @@ function LoginPage() {
   const navigate = useNavigate();
   const [role, setRole] = useState<Role>("rh");
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
   const [candidateCount, setCandidateCount] = useState(0);
 
   useEffect(() => {
     setCandidateCount(listCandidates().length);
     const s = getSession();
     if (s) {
-      navigate({ to: s.role === "rh" ? "/dashboard" : "/apply" });
+      navigate({ to: s.role === "rh" ? "/dashboard" : "/record" });
     }
   }, [navigate]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const session = login(role, name, role === "candidato" ? email : undefined);
-    if (role === "rh") {
-      navigate({ to: "/dashboard" });
-    } else {
-      const cand = session.email ? getCandidateByEmail(session.email) : undefined;
-      if (cand?.inviteToken) {
-        navigate({ to: "/invite/$token", params: { token: cand.inviteToken } });
-      } else {
-        navigate({ to: "/apply" });
-      }
-    }
+    login(role, name);
+    navigate({ to: role === "rh" ? "/dashboard" : "/record" });
   }
 
   return (
@@ -131,19 +121,6 @@ function LoginPage() {
               className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
             />
           </label>
-
-          {role === "candidato" && (
-            <label className="block mt-4 text-sm">
-              <span className="text-muted-foreground">Seu e-mail</span>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Ex.: joao@email.com"
-                className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-              />
-            </label>
-          )}
 
           <button type="submit" className="btn-primary btn-primary-hover w-full mt-6">
             {role === "rh" ? "Entrar como RH" : "Continuar como candidato"}

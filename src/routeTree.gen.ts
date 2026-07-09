@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VideosRouteImport } from './routes/videos'
+import { Route as RecordRouteImport } from './routes/record'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ApplyRouteImport } from './routes/apply'
 import { Route as IndexRouteImport } from './routes/index'
@@ -20,6 +21,11 @@ import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 const VideosRoute = VideosRouteImport.update({
   id: '/videos',
   path: '/videos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RecordRoute = RecordRouteImport.update({
+  id: '/record',
+  path: '/record',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -57,6 +63,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/apply': typeof ApplyRoute
   '/dashboard': typeof DashboardRoute
+  '/record': typeof RecordRoute
   '/videos': typeof VideosRoute
   '/invite/$token': typeof InviteTokenRoute
   '/jobs/$jobId': typeof JobsJobIdRoute
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/apply': typeof ApplyRoute
   '/dashboard': typeof DashboardRoute
+  '/record': typeof RecordRoute
   '/videos': typeof VideosRoute
   '/invite/$token': typeof InviteTokenRoute
   '/jobs/$jobId': typeof JobsJobIdRoute
@@ -76,6 +84,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/apply': typeof ApplyRoute
   '/dashboard': typeof DashboardRoute
+  '/record': typeof RecordRoute
   '/videos': typeof VideosRoute
   '/invite/$token': typeof InviteTokenRoute
   '/jobs/$jobId': typeof JobsJobIdRoute
@@ -87,6 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/apply'
     | '/dashboard'
+    | '/record'
     | '/videos'
     | '/invite/$token'
     | '/jobs/$jobId'
@@ -96,6 +106,7 @@ export interface FileRouteTypes {
     | '/'
     | '/apply'
     | '/dashboard'
+    | '/record'
     | '/videos'
     | '/invite/$token'
     | '/jobs/$jobId'
@@ -105,6 +116,7 @@ export interface FileRouteTypes {
     | '/'
     | '/apply'
     | '/dashboard'
+    | '/record'
     | '/videos'
     | '/invite/$token'
     | '/jobs/$jobId'
@@ -115,6 +127,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApplyRoute: typeof ApplyRoute
   DashboardRoute: typeof DashboardRoute
+  RecordRoute: typeof RecordRoute
   VideosRoute: typeof VideosRoute
   InviteTokenRoute: typeof InviteTokenRoute
   JobsJobIdRoute: typeof JobsJobIdRoute
@@ -128,6 +141,13 @@ declare module '@tanstack/react-router' {
       path: '/videos'
       fullPath: '/videos'
       preLoaderRoute: typeof VideosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/record': {
+      id: '/record'
+      path: '/record'
+      fullPath: '/record'
+      preLoaderRoute: typeof RecordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -179,6 +199,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApplyRoute: ApplyRoute,
   DashboardRoute: DashboardRoute,
+  RecordRoute: RecordRoute,
   VideosRoute: VideosRoute,
   InviteTokenRoute: InviteTokenRoute,
   JobsJobIdRoute: JobsJobIdRoute,
