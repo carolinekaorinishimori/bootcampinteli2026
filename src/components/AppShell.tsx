@@ -14,19 +14,35 @@ export function AppShell({ children, actions }: { children: ReactNode; actions?:
     <div className="min-h-screen">
       <header className="sticky top-0 z-40 backdrop-blur-xl bg-background/70 border-b border-border">
         <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
-          <Link to="/dashboard" className="flex items-center gap-2.5 group">
+          <Link
+            to={session?.role === "rh" ? "/dashboard" : "/apply"}
+            className="flex items-center gap-2.5 group"
+          >
             <LogoMark />
             <div className="flex flex-col leading-tight">
               <span className="font-display font-semibold text-lg tracking-tight">SkyHire</span>
               <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                Triagem para aviação
+                {session?.role === "rh" ? "Painel do RH" : "Área do candidato"}
               </span>
             </div>
           </Link>
-          <nav className="hidden md:flex items-center gap-1 text-sm">
-            <Link to="/dashboard" activeOptions={{ exact: true }} className="px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground [&.active]:text-foreground [&.active]:bg-surface">Vagas</Link>
-            <Link to="/videos" className="px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground [&.active]:text-foreground [&.active]:bg-surface">Galeria de vídeos</Link>
-          </nav>
+          {session?.role === "rh" && (
+            <nav className="hidden md:flex items-center gap-1 text-sm">
+              <Link
+                to="/dashboard"
+                activeOptions={{ exact: true }}
+                className="px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground [&.active]:text-foreground [&.active]:bg-surface"
+              >
+                Vagas
+              </Link>
+              <Link
+                to="/questionarios"
+                className="px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground [&.active]:text-foreground [&.active]:bg-surface"
+              >
+                Questionários
+              </Link>
+            </nav>
+          )}
           <div className="flex items-center gap-3">
             {actions}
             {session && (
@@ -34,7 +50,7 @@ export function AppShell({ children, actions }: { children: ReactNode; actions?:
                 <div className="hidden sm:flex flex-col leading-tight text-right">
                   <span className="text-xs font-medium">{session.name}</span>
                   <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                    {session.role === "rh" ? "RH" : "Aplicador"}
+                    {session.role === "rh" ? "RH" : "Candidato"}
                   </span>
                 </div>
                 <button
@@ -96,7 +112,15 @@ export function LogoMark({ size = 40 }: { size?: number } = {}) {
   );
 }
 
-export function Stat({ label, value, tone = "default" }: { label: string; value: ReactNode; tone?: "default" | "primary" | "success" | "warning" }) {
+export function Stat({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: ReactNode;
+  tone?: "default" | "primary" | "success" | "warning";
+}) {
   const toneClass = {
     default: "text-foreground",
     primary: "text-primary",

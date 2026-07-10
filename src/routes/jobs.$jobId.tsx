@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell, Stat } from "@/components/AppShell";
 import {
   getJob,
@@ -13,7 +13,19 @@ import {
   type Candidate,
   type Job,
 } from "@/lib/skyhire";
-import { downloadTemplate, parseSpreadsheetToCandidates } from "@/lib/spreadsheet";
+import {
+  downloadTemplate,
+  isSpreadsheetFile,
+  parseSpreadsheetToCandidates,
+} from "@/lib/spreadsheet";
+import {
+  analyzeCandidate,
+  getOpenAIModel,
+  getOpenAIKey,
+  isOpenAIConfigured,
+  setOpenAIConfig,
+  type AIAnalysis,
+} from "@/lib/llm";
 
 export const Route = createFileRoute("/jobs/$jobId")({
   component: JobDetail,
@@ -27,6 +39,9 @@ function JobDetail() {
   const [anonymized, setAnonymized] = useState(true);
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<"all" | "shortlist" | "rejected">("all");
+  const [showAiSettings, setShowAiSettings] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
 
   function refresh() {
     const j = getJob(jobId);
@@ -44,7 +59,8 @@ function JobDetail() {
   );
 
   const stats = useMemo(() => {
-    if (!job) return { total: 0, shortlisted: 0, rejected: 0, avg: 0, invited: 0, recorded: 0, passing: 0 };
+    if (!job)
+      return { total: 0, shortlisted: 0, rejected: 0, avg: 0, invited: 0, answered: 0, passing: 0 };
     const passing = cands.filter((c) => passesCutoff(job, c)).length;
     const avg = cands.length ? cands.reduce((a, c) => a + c.score, 0) / cands.length : 0;
     return {
@@ -53,8 +69,8 @@ function JobDetail() {
       rejected: cands.length - shortlist.size,
       passing,
       avg,
-      invited: cands.filter((c) => c.status === "invited" || c.status === "recorded").length,
-      recorded: cands.filter((c) => c.status === "recorded").length,
+      invited: cands.filter((c) => c.status === "invited" || c.status === "answered").length,
+      answered: cands.filter((c) => c.status === "answered").length,
     };
   }, [job, cands, shortlist]);
 
@@ -71,20 +87,31 @@ function JobDetail() {
     );
   }
 
-  async function handleFile(f: File) {
+  async function handleFiles(files: File[]) {
     if (!job) return;
+    const valid = files.filter(isSpreadsheetFile);
+    if (valid.length === 0) {
+      alert("Nenhum arquivo de planilha (.xlsx, .csv ou .zip) encontrado.");
+      return;
+    }
     setBusy(true);
     try {
-      const parsed = await parseSpreadsheetToCandidates(f, job);
-      if (parsed.length === 0) {
-        alert("Nenhum candidato encontrado. Verifique se a planilha tem colunas como Nome, Email, Experiencia, Escolaridade, Habilidades.");
+      const all: Candidate[] = [];
+      for (const f of valid) {
+        const parsed = await parseSpreadsheetToCandidates(f, job);
+        all.push(...parsed);
+      }
+      if (all.length === 0) {
+        alert(
+          "Nenhum candidato encontrado. Verifique se as planilhas têm colunas como Nome, Email, Experiencia, Escolaridade, Habilidades.",
+        );
       } else {
-        replaceJobCandidates(job.id, parsed);
+        replaceJobCandidates(job.id, all);
         refresh();
       }
     } catch (e) {
       console.error(e);
-      alert("Não foi possível ler a planilha. Use .xlsx ou .csv.");
+      alert("Não foi possível ler a planilha. Use .xlsx, .csv ou um .zip contendo a planilha.");
     } finally {
       setBusy(false);
     }
@@ -123,18 +150,29 @@ function JobDetail() {
       }
     >
       <div className="mb-6">
-        <button onClick={() => navigate({ to: "/dashboard" })} className="text-sm text-muted-foreground hover:text-foreground">
+        <button
+          onClick={() => navigate({ to: "/dashboard" })}
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
           ← Todas as vagas
         </button>
         <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="text-xs uppercase tracking-widest text-primary/90">{job.department || "Aviação"}</div>
+            <div className="text-xs uppercase tracking-widest text-primary/90">
+              {job.department || "Aviação"}
+            </div>
             <h1 className="font-display text-4xl font-semibold mt-1">{job.title}</h1>
-            {job.description && <p className="text-muted-foreground mt-2 max-w-2xl">{job.description}</p>}
+            {job.description && (
+              <p className="text-muted-foreground mt-2 max-w-2xl">{job.description}</p>
+            )}
           </div>
           <div className="text-xs text-muted-foreground text-right">
-            <div>Nota de corte: <b className="text-foreground">{job.cutoff.toFixed(1)} / 5</b></div>
-            <div>Exp. mínima: <b className="text-foreground">{job.minExperience} anos</b></div>
+            <div>
+              Nota de corte: <b className="text-foreground">{job.cutoff.toFixed(1)} / 5</b>
+            </div>
+            <div>
+              Exp. mínima: <b className="text-foreground">{job.minExperience} anos</b>
+            </div>
             <div>{job.criteria.length} critérios ponderados</div>
           </div>
         </div>
@@ -142,37 +180,99 @@ function JobDetail() {
 
       <div className="grid md:grid-cols-4 gap-3 mb-8">
         <Stat label="Candidatos" value={stats.total} />
-        <Stat label={`Selecionados (top ${Math.round(SHORTLIST_PCT * 100)}%)`} value={stats.shortlisted} tone="success" />
+        <Stat
+          label={`Selecionados (top ${Math.round(SHORTLIST_PCT * 100)}%)`}
+          value={stats.shortlisted}
+          tone="success"
+        />
         <Stat label="Descartados" value={stats.rejected} tone="warning" />
         <Stat label="Nota média" value={`${stats.avg.toFixed(1)}/5`} tone="primary" />
       </div>
 
       {/* Upload panel */}
       <div className="panel p-6 mb-8">
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="font-display text-xl font-semibold mr-2">
+              Importar planilha de candidatos (lote Gupy)
+            </h2>
+            <span
+              className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                isOpenAIConfigured()
+                  ? "bg-[color:var(--success)]/15 text-[color:var(--success)] border-[color:var(--success)]/30"
+                  : "bg-destructive/15 text-destructive border-destructive/30"
+              }`}
+              title="Status da integração com OpenAI"
+            >
+              IA: {isOpenAIConfigured() ? "configurada" : "sem chave"}
+            </span>
+            <button onClick={() => setShowAiSettings((v) => !v)} className="btn-ghost text-xs">
+              ⚙ Configurar IA
+            </button>
+          </div>
+        </div>
+
+        {showAiSettings && (
+          <AiSettings
+            onSaved={() => {
+              setShowAiSettings(false);
+              alert("Configuração da OpenAI salva neste navegador.");
+            }}
+          />
+        )}
+
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="font-display text-xl font-semibold">Importar planilha de candidatos (lote Gupy)</h2>
             <p className="text-xs text-muted-foreground mt-1 max-w-lg">
-              Envie .xlsx ou .csv exportado do Gupy (500+ aplicações suportadas). A triagem pontua cada
-              candidato de 0–5 pelos critérios da vaga + fit cultural Azul, e seleciona automaticamente o
-              top {Math.round(SHORTLIST_PCT * 100)}% para a etapa de vídeo.
+              Envie .xlsx ou .csv exportado do Gupy (500+ aplicações suportadas). A triagem pontua
+              cada candidato de 0–5 pelos critérios da vaga + fit cultural Azul, e seleciona
+              automaticamente o top {Math.round(SHORTLIST_PCT * 100)}% para a etapa de questionário.
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={downloadTemplate} className="btn-ghost text-sm">Baixar modelo</button>
-            <label className="btn-primary btn-primary-hover text-sm cursor-pointer">
-              {busy ? "Analisando…" : cands.length ? "Substituir planilha" : "Enviar planilha"}
-              <input
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) handleFile(f);
-                  e.currentTarget.value = "";
-                }}
-              />
-            </label>
+            <button onClick={downloadTemplate} className="btn-ghost text-sm">
+              Baixar modelo
+            </button>
+            <div className="flex items-center gap-2">
+              <label className="btn-primary btn-primary-hover text-sm cursor-pointer">
+                {busy
+                  ? "Analisando…"
+                  : cands.length
+                    ? "Substituir planilha(s)"
+                    : "Enviar planilha(s)"}
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv,.zip"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files ? Array.from(e.target.files) : [];
+                    if (f.length) handleFiles(f);
+                    e.currentTarget.value = "";
+                  }}
+                />
+              </label>
+              <label
+                className="btn-ghost text-sm cursor-pointer"
+                title="Importar uma pasta inteira de planilhas"
+              >
+                📁 Pasta
+                <input
+                  ref={folderRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv,.zip"
+                  multiple
+                  {...{ webkitdirectory: "", directory: "" }}
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files ? Array.from(e.target.files) : [];
+                    if (f.length) handleFiles(f);
+                    e.currentTarget.value = "";
+                  }}
+                />
+              </label>
+            </div>
           </div>
         </div>
       </div>
@@ -186,7 +286,9 @@ function JobDetail() {
                   key={k}
                   onClick={() => setFilter(k)}
                   className={`px-3 py-1.5 rounded-md transition ${
-                    filter === k ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground"
+                    filter === k
+                      ? "bg-primary text-primary-foreground font-medium"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {k === "all"
@@ -203,7 +305,7 @@ function JobDetail() {
                 disabled={stats.shortlisted === 0}
                 className="btn-primary btn-primary-hover text-sm disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Convidar selecionados para vídeo ({stats.shortlisted})
+                Convidar selecionados a responder questionário ({stats.shortlisted})
               </button>
             </div>
           </div>
@@ -221,7 +323,9 @@ function JobDetail() {
               />
             ))}
             {filtered.length === 0 && (
-              <div className="p-8 text-center text-sm text-muted-foreground">Nenhum candidato neste filtro.</div>
+              <div className="p-8 text-center text-sm text-muted-foreground">
+                Nenhum candidato neste filtro.
+              </div>
             )}
           </div>
         </>
@@ -230,8 +334,8 @@ function JobDetail() {
       <p className="mt-8 text-xs text-muted-foreground max-w-2xl">
         <b>LGPD & antiviés:</b> a triagem considera apenas dados de mérito (experiência, formação,
         competências e certificações). Nome e contatos ficam ocultos por padrão. Dados ficam
-        armazenados no navegador do recrutador — nunca envie planilhas com dados sensíveis
-        (idade, gênero, foto, estado civil).
+        armazenados no navegador do recrutador — nunca envie planilhas com dados sensíveis (idade,
+        gênero, foto, estado civil).
       </p>
     </AppShell>
   );
@@ -253,8 +357,12 @@ function CandidateRow({
   onRefresh: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   const approved = shortlisted;
-  const displayName = anonymized ? `Candidato #${rank.toString().padStart(3, "0")}` : candidate.fullName;
+  const displayName = anonymized
+    ? `Candidato #${rank.toString().padStart(3, "0")}`
+    : candidate.fullName;
 
   const inviteUrl = candidate.inviteToken
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/invite/${candidate.inviteToken}`
@@ -273,10 +381,10 @@ function CandidateRow({
       onRefresh();
     }
     const url = `${window.location.origin}/invite/${token}`;
-    const subject = encodeURIComponent(`Etapa em vídeo — ${job.title}`);
+    const subject = encodeURIComponent(`Questionário da vaga — ${job.title}`);
     const body = encodeURIComponent(
-      `Olá,\n\nVocê avançou para a etapa em vídeo da vaga "${job.title}".\n` +
-        `Acesse o link abaixo para gravar suas respostas (até 2 min):\n\n${url}\n\n` +
+      `Olá,\n\nVocê avançou para a etapa de questionário da vaga "${job.title}".\n` +
+        `Acesse o link abaixo para responder às perguntas da vaga:\n\n${url}\n\n` +
         `Este link é pessoal e intransferível. Ao acessar, você poderá revisar o consentimento LGPD.\n\n` +
         `Equipe de Recrutamento — Azul Talentos`,
     );
@@ -286,6 +394,21 @@ function CandidateRow({
   function generateInvite() {
     updateCandidate(candidate.id, { inviteToken: uid(), status: "invited" });
     onRefresh();
+  }
+
+  async function runAiAnalysis() {
+    setAnalyzing(true);
+    setAiError(null);
+    try {
+      const questions = job.questionnaire ?? [];
+      const result = await analyzeCandidate(job, candidate, questions);
+      updateCandidate(candidate.id, { aiAnalysis: result });
+      onRefresh();
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "Falha ao analisar com IA.");
+    } finally {
+      setAnalyzing(false);
+    }
   }
 
   return (
@@ -304,10 +427,10 @@ function CandidateRow({
           </div>
         </div>
         <div className="hidden md:flex items-center gap-2">
-          {candidate.status === "recorded" && candidate.videoBlobUrl && (
-            <a href={candidate.videoBlobUrl} target="_blank" rel="noreferrer" className="btn-ghost text-xs">
-              ▶ Ver vídeo
-            </a>
+          {candidate.status === "answered" && (
+            <Link to="/questionarios" search={{ c: candidate.id }} className="btn-ghost text-xs">
+              📝 Ver respostas
+            </Link>
           )}
           {approved && !candidate.inviteToken && (
             <button onClick={generateInvite} className="btn-primary btn-primary-hover text-xs">
@@ -315,13 +438,36 @@ function CandidateRow({
             </button>
           )}
           {approved && candidate.email && (
-            <button onClick={sendEmail} className="btn-ghost text-xs" title={`Enviar e-mail para ${candidate.email}`}>
+            <button
+              onClick={sendEmail}
+              className="btn-ghost text-xs"
+              title={`Enviar e-mail para ${candidate.email}`}
+            >
               ✉ Enviar e-mail
             </button>
           )}
           {candidate.inviteToken && (
             <button onClick={copyInvite} className="btn-ghost text-xs">
               Copiar link
+            </button>
+          )}
+          {candidate.status === "answered" && (
+            <button
+              onClick={runAiAnalysis}
+              disabled={analyzing}
+              className="btn-ghost text-xs disabled:opacity-50"
+              title="Analisar as respostas do questionário com IA (OpenAI)"
+            >
+              {analyzing
+                ? "Analisando…"
+                : candidate.aiAnalysis
+                  ? "↻ Reanalisar IA"
+                  : "✨ Analisar com IA"}
+            </button>
+          )}
+          {candidate.aiAnalysis && (
+            <button onClick={() => setOpen(true)} className="btn-ghost text-xs">
+              Ver IA
             </button>
           )}
           <button onClick={() => setOpen(!open)} className="btn-ghost text-xs">
@@ -333,53 +479,101 @@ function CandidateRow({
       {open && (
         <div className="mt-4 space-y-4 text-sm">
           <div className="rounded-lg border border-border bg-surface p-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Justificativa da nota (auditável)</div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+              Justificativa da nota (auditável)
+            </div>
             <p className="text-foreground/90 text-xs leading-relaxed">{candidate.justification}</p>
           </div>
+
+          <AiAnalysisBlock
+            candidate={candidate}
+            job={job}
+            analyzing={analyzing}
+            aiError={aiError}
+            onAnalyze={runAiAnalysis}
+          />
           <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">Critérios atendidos</div>
-            <div className="flex flex-wrap gap-1.5">
-              {candidate.matched.length === 0 && <span className="text-muted-foreground text-xs">Nenhum.</span>}
-              {candidate.matched.map((m) => (
-                <span key={m} className="text-xs px-2 py-0.5 rounded-full bg-[color:var(--success)]/15 text-[color:var(--success)] border border-[color:var(--success)]/30">
-                  ✓ {m}
-                </span>
-              ))}
+            <div>
+              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
+                Critérios atendidos
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {candidate.matched.length === 0 && (
+                  <span className="text-muted-foreground text-xs">Nenhum.</span>
+                )}
+                {candidate.matched.map((m) => (
+                  <span
+                    key={m}
+                    className="text-xs px-2 py-0.5 rounded-full bg-[color:var(--success)]/15 text-[color:var(--success)] border border-[color:var(--success)]/30"
+                  >
+                    ✓ {m}
+                  </span>
+                ))}
+              </div>
+              {candidate.missingRequired.length > 0 && (
+                <>
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground mt-3 mb-1.5">
+                    Requisitos ausentes
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {candidate.missingRequired.map((m) => (
+                      <span
+                        key={m}
+                        className="text-xs px-2 py-0.5 rounded-full bg-destructive/15 text-destructive border border-destructive/30"
+                      >
+                        ✗ {m}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
-            {candidate.missingRequired.length > 0 && (
-              <>
-                <div className="text-xs uppercase tracking-wider text-muted-foreground mt-3 mb-1.5">Requisitos ausentes</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {candidate.missingRequired.map((m) => (
-                    <span key={m} className="text-xs px-2 py-0.5 rounded-full bg-destructive/15 text-destructive border border-destructive/30">
-                      ✗ {m}
-                    </span>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-          <div className="space-y-1.5 text-xs">
-            {!anonymized && (
-              <>
-                <Row k="Email" v={candidate.email} />
-                <Row k="Telefone" v={candidate.phone || "—"} />
-              </>
-            )}
-            <Row k="Competências" v={candidate.skills || "—"} />
-            <Row k="Certificações" v={candidate.certifications || "—"} />
-            <Row k="Idiomas" v={candidate.languages || "—"} />
-            <Row k="Formação" v={candidate.education || "—"} />
-          </div>
-          <div className="md:hidden flex flex-wrap gap-2">
-            {approved && !candidate.inviteToken && (
-              <button onClick={generateInvite} className="btn-primary btn-primary-hover text-xs">Gerar convite</button>
-            )}
-            {candidate.inviteToken && (
-              <button onClick={copyInvite} className="btn-ghost text-xs">Copiar link do vídeo</button>
-            )}
-          </div>
+            <div className="space-y-1.5 text-xs">
+              {!anonymized && (
+                <>
+                  <Row k="Email" v={candidate.email} />
+                  <Row k="Telefone" v={candidate.phone || "—"} />
+                </>
+              )}
+              <Row k="Competências" v={candidate.skills || "—"} />
+              <Row k="Certificações" v={candidate.certifications || "—"} />
+              <Row k="Idiomas" v={candidate.languages || "—"} />
+              <Row k="Formação" v={candidate.education || "—"} />
+            </div>
+            <div className="md:hidden flex flex-wrap gap-2">
+              {approved && !candidate.inviteToken && (
+                <button onClick={generateInvite} className="btn-primary btn-primary-hover text-xs">
+                  Gerar convite
+                </button>
+              )}
+              {candidate.inviteToken && (
+                <button onClick={copyInvite} className="btn-ghost text-xs">
+                  Copiar link do questionário
+                </button>
+              )}
+              {candidate.status === "answered" && (
+                <Link
+                  to="/questionarios"
+                  search={{ c: candidate.id }}
+                  className="btn-ghost text-xs"
+                >
+                  📝 Ver respostas
+                </Link>
+              )}
+              {candidate.status === "answered" && (
+                <button
+                  onClick={runAiAnalysis}
+                  disabled={analyzing}
+                  className="btn-ghost text-xs disabled:opacity-50"
+                >
+                  {analyzing
+                    ? "Analisando…"
+                    : candidate.aiAnalysis
+                      ? "↻ Reanalisar IA"
+                      : "✨ Analisar com IA"}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -396,9 +590,194 @@ function Row({ k, v }: { k: string; v: string }) {
   );
 }
 
+function AiAnalysisBlock({
+  candidate,
+  job,
+  analyzing,
+  aiError,
+  onAnalyze,
+}: {
+  candidate: Candidate;
+  job: Job;
+  analyzing: boolean;
+  aiError: string | null;
+  onAnalyze: () => void;
+}) {
+  const ai = candidate.aiAnalysis;
+  const questions = job.questionnaire ?? [];
+  const qById = new Map(questions.map((q) => [q.id, q]));
+
+  if (!ai) {
+    return (
+      <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-xs text-muted-foreground">
+            {candidate.status === "answered"
+              ? "Análise por IA das respostas ainda não gerada."
+              : "O candidato ainda não respondeu ao questionário."}
+          </div>
+          {candidate.status === "answered" && (
+            <button
+              onClick={onAnalyze}
+              disabled={analyzing}
+              className="btn-primary btn-primary-hover text-xs disabled:opacity-50"
+            >
+              {analyzing ? "Analisando…" : "✨ Analisar com IA"}
+            </button>
+          )}
+        </div>
+        {aiError && <p className="text-xs text-destructive mt-2">{aiError}</p>}
+      </div>
+    );
+  }
+
+  const recMap: Record<AIAnalysis["recommendation"], { label: string; cls: string }> = {
+    avancar: {
+      label: "Avançar",
+      cls: "bg-[color:var(--success)]/15 text-[color:var(--success)] border-[color:var(--success)]/30",
+    },
+    revisar: {
+      label: "Revisar",
+      cls: "bg-[color:var(--warning)]/15 text-[color:var(--warning)] border-[color:var(--warning)]/30",
+    },
+    descartar: {
+      label: "Descartar",
+      cls: "bg-destructive/15 text-destructive border-destructive/30",
+    },
+  };
+  const rec = recMap[ai.recommendation];
+
+  return (
+    <div className="rounded-lg border border-primary/30 bg-primary/[0.04] p-3 space-y-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] uppercase tracking-wider text-primary/90">
+            Análise por IA (OpenAI)
+          </span>
+          <span className="text-xs font-semibold">{ai.score.toFixed(1)}/5</span>
+          <span
+            className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border ${rec.cls}`}
+          >
+            {rec.label}
+          </span>
+          <span className="text-[10px] text-muted-foreground">
+            confiança {(ai.confidence * 100).toFixed(0)}% · {ai.model}
+          </span>
+        </div>
+        <button
+          onClick={onAnalyze}
+          disabled={analyzing}
+          className="btn-ghost text-xs disabled:opacity-50"
+        >
+          {analyzing ? "Analisando…" : "↻ Reanalisar"}
+        </button>
+      </div>
+
+      {ai.summary && <p className="text-foreground/90 text-xs leading-relaxed">{ai.summary}</p>}
+
+      <div className="grid md:grid-cols-2 gap-3">
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-[color:var(--success)] mb-1">
+            Pontos fortes
+          </div>
+          <ul className="list-disc list-inside text-xs text-foreground/90 space-y-0.5">
+            {ai.strengths.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-destructive mb-1">
+            Fragilidades
+          </div>
+          <ul className="list-disc list-inside text-xs text-foreground/90 space-y-0.5">
+            {ai.weaknesses.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      {ai.perQuestion.length > 0 && (
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
+            Por pergunta
+          </div>
+          <div className="space-y-2">
+            {ai.perQuestion
+              .filter((p) => p.observation.trim().length > 0)
+              .map((p) => {
+                const q = qById.get(p.id);
+                return (
+                  <div key={p.id} className="text-xs">
+                    <div className="text-muted-foreground">{q ? q.prompt : p.id}</div>
+                    <div className="text-foreground/90 pl-2 border-l border-border">
+                      {p.observation}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      {aiError && <p className="text-xs text-destructive">{aiError}</p>}
+    </div>
+  );
+}
+
+function AiSettings({ onSaved }: { onSaved: () => void }) {
+  const [key, setKey] = useState(getOpenAIKey());
+  const [model, setModel] = useState(getOpenAIModel());
+
+  return (
+    <div className="rounded-lg border border-border bg-surface p-3 mb-4 space-y-3">
+      <p className="text-xs text-muted-foreground">
+        A chave da OpenAI é usada diretamente do navegador e salva apenas neste dispositivo
+        (localStorage). Também é possível definir <code>VITE_OPENAI_API_KEY</code> e{" "}
+        <code>VITE_OPENAI_MODEL</code> em um arquivo <code>.env</code>.
+      </p>
+      <label className="block">
+        <span className="text-xs uppercase tracking-wider text-muted-foreground">
+          Chave da OpenAI (sk-…)
+        </span>
+        <input
+          type="password"
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          placeholder="sk-..."
+          className="input mt-1.5 w-full"
+        />
+      </label>
+      <label className="block">
+        <span className="text-xs uppercase tracking-wider text-muted-foreground">Modelo</span>
+        <input
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          placeholder="gpt-4o-mini"
+          className="input mt-1.5 w-full"
+        />
+      </label>
+      <button
+        onClick={() => {
+          setOpenAIConfig(key, model);
+          onSaved();
+        }}
+        className="btn-primary btn-primary-hover text-xs"
+      >
+        Salvar configuração
+      </button>
+    </div>
+  );
+}
+
 function ScoreDial({ value, approved }: { value: number; approved: boolean }) {
   const angle = (value / 5) * 360;
-  const color = approved ? "var(--success)" : value >= 2.5 ? "var(--warning)" : "var(--destructive)";
+  const color = approved
+    ? "var(--success)"
+    : value >= 2.5
+      ? "var(--warning)"
+      : "var(--destructive)";
   return (
     <div
       className="h-12 w-12 rounded-full grid place-items-center text-xs font-semibold shrink-0"
@@ -421,11 +800,29 @@ function StatusPill({ status, approved }: { status: Candidate["status"]; approve
         ? "bg-[color:var(--success)]/15 text-[color:var(--success)] border-[color:var(--success)]/30"
         : "bg-destructive/15 text-destructive border-destructive/30",
     },
-    approved: { label: "Aprovado", cls: "bg-[color:var(--success)]/15 text-[color:var(--success)] border-[color:var(--success)]/30" },
-    rejected: { label: "Reprovado", cls: "bg-destructive/15 text-destructive border-destructive/30" },
-    invited: { label: "Convidado p/ vídeo", cls: "bg-primary/15 text-primary border-primary/30" },
-    recorded: { label: "Vídeo gravado", cls: "bg-accent/15 text-accent border-accent/30" },
+    approved: {
+      label: "Aprovado",
+      cls: "bg-[color:var(--success)]/15 text-[color:var(--success)] border-[color:var(--success)]/30",
+    },
+    rejected: {
+      label: "Reprovado",
+      cls: "bg-destructive/15 text-destructive border-destructive/30",
+    },
+    invited: {
+      label: "Convidado p/ questionário",
+      cls: "bg-primary/15 text-primary border-primary/30",
+    },
+    answered: {
+      label: "Questionário respondido",
+      cls: "bg-accent/15 text-accent border-accent/30",
+    },
   };
   const s = map[status];
-  return <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border ${s.cls}`}>{s.label}</span>;
+  return (
+    <span
+      className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border ${s.cls}`}
+    >
+      {s.label}
+    </span>
+  );
 }

@@ -24,14 +24,14 @@ function LoginPage() {
     setCandidateCount(listCandidates().length);
     const s = getSession();
     if (s) {
-      navigate({ to: s.role === "rh" ? "/dashboard" : "/record" });
+      navigate({ to: s.role === "rh" ? "/dashboard" : "/apply" });
     }
   }, [navigate]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     login(role, name);
-    navigate({ to: role === "rh" ? "/dashboard" : "/record" });
+    navigate({ to: role === "rh" ? "/dashboard" : "/apply" });
   }
 
   return (
@@ -81,8 +81,8 @@ function LoginPage() {
             <br />a gente. <span style={{ color: "var(--azul-yellow)" }}>Recrutamento justo.</span>
           </h1>
           <p className="mt-4 text-white/85 max-w-md">
-            Recrutadores da Azul gerenciam vagas e vídeos. Candidatos entram com o token recebido
-            por e-mail para completar a aplicação.
+            Recrutadores da Azul gerenciam vagas e questionários. Candidatos entram com o token
+            recebido por e-mail para responder ao formulário.
           </p>
         </div>
         <div className="relative text-xs text-white/70">
@@ -101,7 +101,7 @@ function LoginPage() {
               onClick={() => setRole("rh")}
               icon="✈️"
               title="RH"
-              desc="Gerencia vagas, candidatos e vídeos."
+              desc="Gerencia vagas, candidatos e questionários."
             />
             <RoleCard
               active={role === "candidato"}

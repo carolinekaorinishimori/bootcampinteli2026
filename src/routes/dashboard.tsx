@@ -9,7 +9,7 @@ import {
   SHORTLIST_PCT,
   type Job,
 } from "@/lib/skyhire";
-import { importGupyBatch } from "@/lib/spreadsheet";
+import { importGupyFiles, isSpreadsheetFile } from "@/lib/spreadsheet";
 import { getSession } from "@/lib/auth";
 
 export const Route = createFileRoute("/dashboard")({
@@ -28,6 +28,7 @@ function Dashboard() {
   const [hydrated, setHydrated] = useState(false);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const s = getSession();
@@ -45,27 +46,35 @@ function Dashboard() {
 
   const totalCands = hydrated ? listCandidates().length : 0;
   const selectedCount = hydrated
-    ? jobs.reduce(
-        (acc, j) => acc + shortlistIds(j, listCandidates(j.id)).size,
-        0,
-      )
+    ? jobs.reduce((acc, j) => acc + shortlistIds(j, listCandidates(j.id)).size, 0)
     : 0;
 
-  async function handleFile(f: File) {
+  async function handleFiles(files: File[]) {
+    const valid = files.filter(isSpreadsheetFile);
+    if (valid.length === 0) {
+      alert("Nenhum arquivo de planilha (.xlsx, .csv ou .zip) encontrado.");
+      return;
+    }
     setBusy(true);
     try {
-      const { job, count } = await importGupyBatch(f);
-      if (count === 0) {
+      const { jobs: imported, total } = await importGupyFiles(valid);
+      const withCands = imported.filter((j) => listCandidates(j.id).length > 0);
+      if (total === 0) {
         alert(
-          "Nenhum candidato encontrado. Confirme se a planilha exportada do Gupy contém colunas como Nome, Email, Experiência, Escolaridade e Competências.",
+          "Nenhum candidato encontrado. Confirme se as planilhas exportadas do Gupy contêm colunas como Nome, Email, Experiência, Escolaridade e Competências.",
         );
         setJobs(listJobs());
         return;
       }
-      navigate({ to: "/jobs/$jobId", params: { jobId: job.id } });
+      if (imported.length === 1) {
+        navigate({ to: "/jobs/$jobId", params: { jobId: imported[0].id } });
+        return;
+      }
+      setJobs(listJobs());
+      alert(`${imported.length} lotes importados (${total} candidatos no total).`);
     } catch (e) {
       console.error(e);
-      alert("Não foi possível ler a planilha. Use .xlsx ou .csv exportado do Gupy.");
+      alert("Não foi possível ler a planilha. Use .xlsx, .csv ou um .zip contendo a planilha.");
     } finally {
       setBusy(false);
     }
@@ -76,20 +85,42 @@ function Dashboard() {
   return (
     <AppShell
       actions={
-        <label className="btn-primary btn-primary-hover text-sm cursor-pointer">
-          {busy ? "Analisando lote…" : "+ Importar lote Gupy"}
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) handleFile(f);
-              e.currentTarget.value = "";
-            }}
-          />
-        </label>
+        <div className="flex items-center gap-2">
+          <label className="btn-primary btn-primary-hover text-sm cursor-pointer">
+            {busy ? "Analisando…" : "+ Importar lote(s)"}
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xlsx,.xls,.csv,.zip"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files ? Array.from(e.target.files) : [];
+                if (f.length) handleFiles(f);
+                e.currentTarget.value = "";
+              }}
+            />
+          </label>
+          <label
+            className="btn-ghost text-sm cursor-pointer"
+            title="Importar uma pasta inteira de planilhas"
+          >
+            📁 Pasta
+            <input
+              ref={folderRef}
+              type="file"
+              accept=".xlsx,.xls,.csv,.zip"
+              multiple
+              {...{ webkitdirectory: "", directory: "" }}
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files ? Array.from(e.target.files) : [];
+                if (f.length) handleFiles(f);
+                e.currentTarget.value = "";
+              }}
+            />
+          </label>
+        </div>
       }
     >
       <section className="grid md:grid-cols-[1.4fr_1fr] gap-8 items-end mb-12">
@@ -99,12 +130,13 @@ function Dashboard() {
             Painel Azul Talentos
           </div>
           <h1 className="font-display text-5xl md:text-6xl font-semibold leading-[1.05] tracking-tight">
-            Triagem <span className="text-primary">justa</span> e ágil<br />
+            Triagem <span className="text-primary">justa</span> e ágil
+            <br />
             para a Azul Linhas Aéreas.
           </h1>
           <p className="mt-5 text-muted-foreground text-lg max-w-xl">
-            Anexe a planilha exportada do Gupy — o Azul Talentos pontua cada candidato pelo
-            perfil e valores da Azul e seleciona automaticamente o top {Math.round(SHORTLIST_PCT * 100)}%
+            Anexe a planilha exportada do Gupy — o Azul Talentos pontua cada candidato pelo perfil e
+            valores da Azul e seleciona automaticamente o top {Math.round(SHORTLIST_PCT * 100)}%
             para a etapa de vídeo.
           </p>
         </div>
@@ -191,9 +223,14 @@ function EmptyState({ onImport, busy }: { onImport: () => void; busy: boolean })
       <h3 className="mt-4 font-display text-2xl font-semibold">Anexe seu primeiro lote do Gupy</h3>
       <p className="mt-2 text-muted-foreground max-w-md mx-auto text-sm">
         Exporte as aplicações da vaga no Gupy (500+ candidatos suportados) e envie a planilha aqui.
-        O Azul Talentos pontua cada perfil pelos valores da Azul e mantém apenas o top {Math.round(SHORTLIST_PCT * 100)}%.
+        O Azul Talentos pontua cada perfil pelos valores da Azul e mantém apenas o top{" "}
+        {Math.round(SHORTLIST_PCT * 100)}%.
       </p>
-      <button onClick={onImport} disabled={busy} className="btn-primary btn-primary-hover mt-6 disabled:opacity-40">
+      <button
+        onClick={onImport}
+        disabled={busy}
+        className="btn-primary btn-primary-hover mt-6 disabled:opacity-40"
+      >
         {busy ? "Analisando lote…" : "Enviar planilha Gupy"}
       </button>
     </div>

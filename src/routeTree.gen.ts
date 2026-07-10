@@ -9,28 +9,29 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as VideosRouteImport } from './routes/videos'
-import { Route as RecordRouteImport } from './routes/record'
+import { Route as QuestionariosRouteImport } from './routes/questionarios'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as CarreirasRouteImport } from './routes/carreiras'
 import { Route as ApplyRouteImport } from './routes/apply'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as JobsNewRouteImport } from './routes/jobs.new'
 import { Route as JobsJobIdRouteImport } from './routes/jobs.$jobId'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
+import { Route as AplicarJobIdRouteImport } from './routes/aplicar.$jobId'
 
-const VideosRoute = VideosRouteImport.update({
-  id: '/videos',
-  path: '/videos',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RecordRoute = RecordRouteImport.update({
-  id: '/record',
-  path: '/record',
+const QuestionariosRoute = QuestionariosRouteImport.update({
+  id: '/questionarios',
+  path: '/questionarios',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CarreirasRoute = CarreirasRouteImport.update({
+  id: '/carreiras',
+  path: '/carreiras',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApplyRoute = ApplyRouteImport.update({
@@ -58,13 +59,19 @@ const InviteTokenRoute = InviteTokenRouteImport.update({
   path: '/invite/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AplicarJobIdRoute = AplicarJobIdRouteImport.update({
+  id: '/aplicar/$jobId',
+  path: '/aplicar/$jobId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/apply': typeof ApplyRoute
+  '/carreiras': typeof CarreirasRoute
   '/dashboard': typeof DashboardRoute
-  '/record': typeof RecordRoute
-  '/videos': typeof VideosRoute
+  '/questionarios': typeof QuestionariosRoute
+  '/aplicar/$jobId': typeof AplicarJobIdRoute
   '/invite/$token': typeof InviteTokenRoute
   '/jobs/$jobId': typeof JobsJobIdRoute
   '/jobs/new': typeof JobsNewRoute
@@ -72,9 +79,10 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/apply': typeof ApplyRoute
+  '/carreiras': typeof CarreirasRoute
   '/dashboard': typeof DashboardRoute
-  '/record': typeof RecordRoute
-  '/videos': typeof VideosRoute
+  '/questionarios': typeof QuestionariosRoute
+  '/aplicar/$jobId': typeof AplicarJobIdRoute
   '/invite/$token': typeof InviteTokenRoute
   '/jobs/$jobId': typeof JobsJobIdRoute
   '/jobs/new': typeof JobsNewRoute
@@ -83,9 +91,10 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/apply': typeof ApplyRoute
+  '/carreiras': typeof CarreirasRoute
   '/dashboard': typeof DashboardRoute
-  '/record': typeof RecordRoute
-  '/videos': typeof VideosRoute
+  '/questionarios': typeof QuestionariosRoute
+  '/aplicar/$jobId': typeof AplicarJobIdRoute
   '/invite/$token': typeof InviteTokenRoute
   '/jobs/$jobId': typeof JobsJobIdRoute
   '/jobs/new': typeof JobsNewRoute
@@ -95,9 +104,10 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/apply'
+    | '/carreiras'
     | '/dashboard'
-    | '/record'
-    | '/videos'
+    | '/questionarios'
+    | '/aplicar/$jobId'
     | '/invite/$token'
     | '/jobs/$jobId'
     | '/jobs/new'
@@ -105,9 +115,10 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/apply'
+    | '/carreiras'
     | '/dashboard'
-    | '/record'
-    | '/videos'
+    | '/questionarios'
+    | '/aplicar/$jobId'
     | '/invite/$token'
     | '/jobs/$jobId'
     | '/jobs/new'
@@ -115,9 +126,10 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/apply'
+    | '/carreiras'
     | '/dashboard'
-    | '/record'
-    | '/videos'
+    | '/questionarios'
+    | '/aplicar/$jobId'
     | '/invite/$token'
     | '/jobs/$jobId'
     | '/jobs/new'
@@ -126,9 +138,10 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApplyRoute: typeof ApplyRoute
+  CarreirasRoute: typeof CarreirasRoute
   DashboardRoute: typeof DashboardRoute
-  RecordRoute: typeof RecordRoute
-  VideosRoute: typeof VideosRoute
+  QuestionariosRoute: typeof QuestionariosRoute
+  AplicarJobIdRoute: typeof AplicarJobIdRoute
   InviteTokenRoute: typeof InviteTokenRoute
   JobsJobIdRoute: typeof JobsJobIdRoute
   JobsNewRoute: typeof JobsNewRoute
@@ -136,18 +149,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/videos': {
-      id: '/videos'
-      path: '/videos'
-      fullPath: '/videos'
-      preLoaderRoute: typeof VideosRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/record': {
-      id: '/record'
-      path: '/record'
-      fullPath: '/record'
-      preLoaderRoute: typeof RecordRouteImport
+    '/questionarios': {
+      id: '/questionarios'
+      path: '/questionarios'
+      fullPath: '/questionarios'
+      preLoaderRoute: typeof QuestionariosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -155,6 +161,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/carreiras': {
+      id: '/carreiras'
+      path: '/carreiras'
+      fullPath: '/carreiras'
+      preLoaderRoute: typeof CarreirasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/apply': {
@@ -192,15 +205,23 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InviteTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/aplicar/$jobId': {
+      id: '/aplicar/$jobId'
+      path: '/aplicar/$jobId'
+      fullPath: '/aplicar/$jobId'
+      preLoaderRoute: typeof AplicarJobIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApplyRoute: ApplyRoute,
+  CarreirasRoute: CarreirasRoute,
   DashboardRoute: DashboardRoute,
-  RecordRoute: RecordRoute,
-  VideosRoute: VideosRoute,
+  QuestionariosRoute: QuestionariosRoute,
+  AplicarJobIdRoute: AplicarJobIdRoute,
   InviteTokenRoute: InviteTokenRoute,
   JobsJobIdRoute: JobsJobIdRoute,
   JobsNewRoute: JobsNewRoute,

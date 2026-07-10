@@ -78,9 +78,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Azul Talentos — Recrutamento justo da Azul Linhas Aéreas" },
-      { name: "description", content: "Plataforma de recrutamento da Azul Linhas Aéreas: importe planilhas, aplique critérios objetivos e convide os aprovados para gravar vídeo." },
+      {
+        name: "description",
+        content:
+          "Plataforma de recrutamento da Azul Linhas Aéreas: importe planilhas, aplique critérios objetivos e convide os aprovados para gravar vídeo.",
+      },
       { property: "og:title", content: "Azul Talentos — Recrutamento justo da Azul Linhas Aéreas" },
-      { property: "og:description", content: "Importe planilhas, aplique critérios objetivos e convide os aprovados para gravar vídeo." },
+      {
+        property: "og:description",
+        content:
+          "Importe planilhas, aplique critérios objetivos e convide os aprovados para gravar vídeo.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "theme-color", content: "#009EE0" },
@@ -88,7 +96,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     links: [
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Nunito+Sans:wght@400;600;700&display=swap" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Nunito+Sans:wght@400;600;700&display=swap",
+      },
       {
         rel: "stylesheet",
         href: appCss,
